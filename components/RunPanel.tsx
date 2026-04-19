@@ -46,7 +46,7 @@ function loadSkulpt(): Promise<void> {
 }
 
 async function runPythonInBrowser(code: string): Promise<RunResult> {
-  const t0 = Date.now()
+  const t0  = Date.now()
   const out: string[] = []
 
   try {
@@ -54,23 +54,31 @@ async function runPythonInBrowser(code: string): Promise<RunResult> {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const Sk = (window as any).Sk
+
+    // Exact Skulpt config pattern from official docs
     Sk.configure({
       output:   (text: string) => { out.push(text) },
       read:     (x: string) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if (Sk.builtinFiles?.files[x] !== undefined) return (Sk.builtinFiles as any).files[x]
-        throw new Error(`File not found: ${x}`)
+        const files = (Sk.builtinFiles as any)?.files
+        if (files?.[x] !== undefined) return files[x]
+        throw new Error(`File not found: '${x}'`)
       },
-      execLimit: 5000,
+      __future__: Sk.python3,   // enable Python 3 syntax (f-strings, etc.)
+      python3:    true,
+      execLimit:  8000,
     })
 
-    await Sk.misceval.asyncToPromise(() =>
-      Sk.importMainWithBody('<stdin>', false, code, true),
-    )
+    // Use function expression (not arrow) — required by Skulpt's suspension mechanism
+    await Sk.misceval.asyncToPromise(function () {
+      return Sk.importMainWithBody('<stdin>', false, code, true)
+    })
 
     return { stdout: out.join(''), stderr: '', exitCode: 0, language: 'python', runtime: Date.now() - t0 }
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e)
+    // Skulpt errors are Skulpt objects, convert to string
+    const msg = typeof e === 'string' ? e
+      : (e instanceof Error ? e.message : JSON.stringify(e))
     return { stdout: out.join(''), stderr: msg, exitCode: 1, language: 'python', runtime: Date.now() - t0 }
   }
 }
