@@ -36,10 +36,23 @@ CodeCast is a **live coding broadcast platform** — think Twitch for coding int
 **[https://codecast-eta.vercel.app](https://codecast-eta.vercel.app)**
 
 1. Click **Start a session** — get a shareable link instantly  
-2. Open the link in another tab — watch yourself code live  
-3. Select Python → type `print("Hello!")` → press **Run** → see output  
-4. Ask a question in Q&A tab — AI answers it  
-5. Click **Watch Replay** after coding — replay keystroke by keystroke  
+2. Select your language → write code → press **▶ Run** → see output  
+3. Switch to **🤖 AI tab** — Groq annotates your code automatically  
+4. Click **⏮ Watch Replay** after coding — replay keystroke by keystroke  
+
+> **📡 Demo Status — Real-time sync (Socket.io) is currently offline.**  
+> The Railway free trial ($5 credit) on this demo has been exhausted, so the persistent
+> Socket.io server is unavailable. The following features work fully without it:
+> - ✅ **Code execution** — JavaScript, TypeScript (Vercel vm), Python (Pyodide WASM)
+> - ✅ **AI annotations** — Groq Llama 3.3 annotates code directly via Vercel API
+> - ✅ **Session replay** — stored in Supabase, playable any time  
+>
+> The following features require the Socket.io server (Railway) to be running:
+> - ⏸ Live keystroke sync between host and viewers
+> - ⏸ Emoji reactions from viewers
+> - ⏸ Live Q&A (viewer questions synced in real time)
+>
+> To run the full platform locally, start the `server/` alongside Next.js (see [Local Development](#local-development)).
 
 ---
 
@@ -264,6 +277,8 @@ CI runs all checks automatically on every push via GitHub Actions.
 3. Railway auto-deploys from `server/railway.toml`
 
 > ⚠️ **Important**: Do not add a `healthcheckPath` to `railway.toml`. Railway uses TCP health checks for long-lived Socket.io servers.
+
+> 💡 **Free tier note**: Railway's free plan provides $5/month of compute credit (~500hrs). Once the credit is exhausted the server stops. The platform degrades gracefully — code execution (JS/TS/Python) and AI annotations continue working via Vercel even when Railway is down.
 
 ---
 
