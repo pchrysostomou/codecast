@@ -801,22 +801,27 @@ html, body {
 .run-panel__header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: 6px;
+  padding: 7px 10px;
   background: var(--bg-elevated);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  min-width: 0;           /* prevent flex overflow */
 }
 
 .run-panel__title {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   color: var(--text-secondary);
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   letter-spacing: .04em;
   text-transform: uppercase;
+  flex: 1;                /* take available space */
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .run-dot {
@@ -848,9 +853,9 @@ html, body {
 .run-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-left: auto;
-  padding: 4px 12px;
+  gap: 5px;
+  flex-shrink: 0;         /* NEVER compress or hide the button */
+  padding: 4px 10px;
   border-radius: 6px;
   border: 1px solid rgba(63,185,80,.35);
   background: rgba(63,185,80,.08);

@@ -46,8 +46,9 @@ function loadSkulpt(): Promise<void> {
 }
 
 async function runPythonInBrowser(code: string): Promise<RunResult> {
-  const t0  = Date.now()
+  const t0 = Date.now()
   const out: string[] = []
+  const err: string[] = []
 
   try {
     await loadSkulpt()
@@ -55,31 +56,53 @@ async function runPythonInBrowser(code: string): Promise<RunResult> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const Sk = (window as any).Sk
 
-    // Exact Skulpt config pattern from official docs
+    // Assign output directly — most reliable way to capture stdout in Skulpt
+    Sk.output = (text: string) => { out.push(text) }
+
     Sk.configure({
-      output:   (text: string) => { out.push(text) },
-      read:     (x: string) => {
+      output: (text: string) => { out.push(text) },
+      read: (x: string) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const files = (Sk.builtinFiles as any)?.files
         if (files?.[x] !== undefined) return files[x]
         throw new Error(`File not found: '${x}'`)
       },
-      __future__: Sk.python3,   // enable Python 3 syntax (f-strings, etc.)
-      python3:    true,
-      execLimit:  8000,
+      execLimit: 8000,
     })
 
-    // Use function expression (not arrow) — required by Skulpt's suspension mechanism
-    await Sk.misceval.asyncToPromise(function () {
-      return Sk.importMainWithBody('<stdin>', false, code, true)
-    })
+    // Clear Skulpt's module cache so each run executes fresh
+    // (without this, re-running the same code produces no output)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (Sk.sysmodules) (Sk.sysmodules as any).tp$clear?.()
 
-    return { stdout: out.join(''), stderr: '', exitCode: 0, language: 'python', runtime: Date.now() - t0 }
+    // Run synchronously (canSuspend=false) — more reliable for stdout capture
+    // Falls back to async path only for code that explicitly suspends
+    try {
+      Sk.importMainWithBody('<stdin>', false, code, false)
+    } catch (skErr: unknown) {
+      // If sync fails, try async path
+      if (String(skErr).includes('Suspension')) {
+        await Sk.misceval.asyncToPromise(function () {
+          return Sk.importMainWithBody('<stdin_async>', false, code, true)
+        })
+      } else {
+        throw skErr
+      }
+    }
+
+    return {
+      stdout: out.join(''),
+      stderr: err.join(''),
+      exitCode: out.join('').length > 0 || err.length === 0 ? 0 : 1,
+      language: 'python',
+      runtime: Date.now() - t0,
+    }
   } catch (e: unknown) {
-    // Skulpt errors are Skulpt objects, convert to string
     const msg = typeof e === 'string' ? e
-      : (e instanceof Error ? e.message : JSON.stringify(e))
-    return { stdout: out.join(''), stderr: msg, exitCode: 1, language: 'python', runtime: Date.now() - t0 }
+      : (e instanceof Error ? e.message : String(e))
+    // Strip Skulpt internal path noise
+    const clean = msg.replace(/on line \d+ of <stdin[^>]*>/g, '').trim()
+    return { stdout: out.join(''), stderr: clean, exitCode: 1, language: 'python', runtime: Date.now() - t0 }
   }
 }
 
