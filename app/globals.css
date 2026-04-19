@@ -631,6 +631,7 @@ html, body {
 }
 .conn-badge--connected    { color: var(--green); background: var(--green-dim); }
 .conn-badge--disconnected { color: var(--text-muted); background: var(--bg-elevated); }
+.conn-badge--offline      { color: #fb923c; background: rgba(251,146,60,.12); }
 
 .session-body {
   display: flex;

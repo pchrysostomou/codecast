@@ -6,10 +6,10 @@ import { io, type Socket } from 'socket.io-client'
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001'
 
 export function useSocket() {
-  // socket stored as state so consumers re-render when it's ready
-  const [socket, setSocket] = useState<Socket | null>(null)
-  const socketRef = useRef<Socket | null>(null)
+  const [socket, setSocket]       = useState<Socket | null>(null)
+  const socketRef                 = useRef<Socket | null>(null)
   const [isConnected, setIsConnected] = useState(false)
+  const [isOffline, setIsOffline] = useState(false)   // true after all retries fail
   const [viewerCount, setViewerCount] = useState(0)
 
   useEffect(() => {
@@ -17,16 +17,23 @@ export function useSocket() {
       transports: ['websocket', 'polling'],
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
+      timeout: 8000,
     })
 
     socketRef.current = s
 
-    // setState inside event callbacks is fine — not synchronous in effect body
     s.on('connect', () => {
-      setSocket(s)          // expose socket after connection
+      setSocket(s)
       setIsConnected(true)
+      setIsOffline(false)
     })
     s.on('disconnect', () => setIsConnected(false))
+    s.on('connect_error', () => { /* handled by reconnect_failed */ })
+    // After all retry attempts are exhausted → mark offline
+    s.on('reconnect_failed', () => {
+      setIsOffline(true)
+      setIsConnected(false)
+    })
     s.on('viewers:update', ({ count }: { count: number }) => setViewerCount(count))
 
     return () => {
@@ -35,5 +42,5 @@ export function useSocket() {
     }
   }, [])
 
-  return { socket, socketRef, isConnected, viewerCount }
+  return { socket, socketRef, isConnected, isOffline, viewerCount }
 }

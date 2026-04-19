@@ -24,7 +24,7 @@ function CopyIcon() {
 export default function HostPage() {
   const params = useParams()
   const sessionId = params.sessionId as string
-  const { socket, socketRef, isConnected, viewerCount } = useSocket()
+  const { socket, socketRef, isConnected, isOffline, viewerCount } = useSocket()
   const { scheduleAnnotation } = useAIAnnotation(sessionId, socketRef)
 
   const [language, setLanguage] = useState('typescript')
@@ -144,8 +144,8 @@ export default function HostPage() {
             <CopyIcon />
             {copied ? 'Copied!' : 'Share link'}
           </button>
-          <div className={`conn-badge ${isConnected ? 'conn-badge--connected' : 'conn-badge--disconnected'}`}>
-            {isConnected ? '● Live' : '○ Connecting...'}
+          <div className={`conn-badge ${isConnected ? 'conn-badge--connected' : isOffline ? 'conn-badge--offline' : 'conn-badge--disconnected'}`}>
+            {isConnected ? '● Live' : isOffline ? '⊘ Offline' : '○ Connecting…'}
           </div>
         </div>
       </header>
