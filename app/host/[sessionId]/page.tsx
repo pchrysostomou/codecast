@@ -25,7 +25,14 @@ export default function HostPage() {
   const params = useParams()
   const sessionId = params.sessionId as string
   const { socket, socketRef, isConnected, isOffline, viewerCount } = useSocket()
-  const { scheduleAnnotation } = useAIAnnotation(sessionId, socketRef)
+  const { scheduleAnnotation } = useAIAnnotation({
+    sessionId,
+    socketRef,
+    onAnnotation: (annotation) => {
+      setAnnotations((prev) => [...prev.slice(-19), annotation])
+      setIsAnalyzing(false)
+    },
+  })
 
   const [language, setLanguage] = useState('typescript')
   const [copied, setCopied] = useState(false)

@@ -10,16 +10,20 @@ test.describe('Home Page', () => {
   test('loads and shows create/join options', async ({ page }) => {
     await page.goto('/')
     await expect(page).toHaveTitle(/CodeCast/)
-    await expect(page.locator('.action-card')).toHaveCount(2)
+    // New premium landing has lp-btn--primary and lp-join-input
+    await expect(page.locator('.lp-btn--primary').first()).toBeVisible({ timeout: 8_000 })
+    await expect(page.locator('.lp-join-input')).toBeVisible({ timeout: 8_000 })
   })
 
   test('create session button navigates to host page', async ({ page }) => {
     await page.goto('/')
-    await page.getByRole('button', { name: /Start coding/i }).click()
+    // "Start a session" is the primary CTA; "Start coding →" in nav also works
+    await page.locator('#start-coding-btn').click()
     await page.waitForURL(/\/host\/[a-zA-Z0-9_-]+/, { timeout: 15_000 })
     expect(page.url()).toMatch(/\/host\//)
   })
 })
+
 
 test.describe('Host Page', () => {
   let hostUrl: string
@@ -71,14 +75,11 @@ test.describe('Host Page', () => {
 test.describe('Viewer Page', () => {
   let sessionId: string
 
-  test.beforeEach(async ({ browser }) => {
-    const hostCtx = await browser.newContext()
-    const hostPage = await hostCtx.newPage()
-    await hostPage.goto('http://localhost:3002')
-    await hostPage.getByRole('button', { name: /Start coding/i }).click()
-    await hostPage.waitForURL(/\/host\/[a-zA-Z0-9_-]+/, { timeout: 15_000 })
-    sessionId = hostPage.url().split('/host/')[1]
-    await hostCtx.close()
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/')
+    await page.locator('#start-coding-btn').click()
+    await page.waitForURL(/\/host\/[a-zA-Z0-9_-]+/, { timeout: 15_000 })
+    sessionId = page.url().split('/host/')[1]
   })
 
   test('viewer page loads for valid session', async ({ page }) => {
