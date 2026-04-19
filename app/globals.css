@@ -941,6 +941,12 @@ html, body {
   padding: 1px 5px;
   text-transform: uppercase;
 }
+/* Python / client-side badge — green */
+.run-lang-badge--client {
+  background: rgba(59,185,97,.15);
+  color: #3fb950;
+  border-color: rgba(59,185,97,.3);
+}
 
 /* Clear ✕ button */
 .run-clear-btn {

@@ -1,23 +1,81 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import type { Socket } from 'socket.io-client'
 import type { RunResult } from '@/app/api/run/route'
 
-// JS/TS run instantly via Node.js vm (no external API needed)
-const SUPPORTED = new Set(['javascript', 'typescript'])
+// Languages that run server-side via vm (instant, no API)
+const SERVER_LANGS = new Set(['javascript', 'typescript'])
+// Languages that run client-side in-browser
+const CLIENT_LANGS = new Set(['python'])
+
 const LANG_LABEL: Record<string, string> = {
   javascript: 'JS',
   typescript: 'TS',
-  python:     'PY',
-  bash:       'SH',
+  python:     'PY (Skulpt)',
   java:       'Java',
   go:         'Go',
   c:          'C',
   cpp:        'C++',
   rust:       'Rust',
+  bash:       'Bash',
 }
 
+// ── Skulpt loader (Python in browser) ────────────────────────
+let skulptLoaded = false
+let skulptLoading: Promise<void> | null = null
+
+function loadSkulpt(): Promise<void> {
+  if (skulptLoaded) return Promise.resolve()
+  if (skulptLoading) return skulptLoading
+
+  skulptLoading = new Promise((resolve, reject) => {
+    const s1 = document.createElement('script')
+    s1.src = 'https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt.min.js'
+    s1.onload = () => {
+      const s2 = document.createElement('script')
+      s2.src = 'https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt-stdlib.js'
+      s2.onload = () => { skulptLoaded = true; resolve() }
+      s2.onerror = reject
+      document.head.appendChild(s2)
+    }
+    s1.onerror = reject
+    document.head.appendChild(s1)
+  })
+  return skulptLoading
+}
+
+async function runPythonInBrowser(code: string): Promise<RunResult> {
+  const t0 = Date.now()
+  const out: string[] = []
+
+  try {
+    await loadSkulpt()
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const Sk = (window as any).Sk
+    Sk.configure({
+      output:   (text: string) => { out.push(text) },
+      read:     (x: string) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if (Sk.builtinFiles?.files[x] !== undefined) return (Sk.builtinFiles as any).files[x]
+        throw new Error(`File not found: ${x}`)
+      },
+      execLimit: 5000,
+    })
+
+    await Sk.misceval.asyncToPromise(() =>
+      Sk.importMainWithBody('<stdin>', false, code, true),
+    )
+
+    return { stdout: out.join(''), stderr: '', exitCode: 0, language: 'python', runtime: Date.now() - t0 }
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return { stdout: out.join(''), stderr: msg, exitCode: 1, language: 'python', runtime: Date.now() - t0 }
+  }
+}
+
+// ── Component ─────────────────────────────────────────────────
 interface RunPanelProps {
   code: string
   language: string
@@ -34,8 +92,11 @@ export function RunPanel({ code, language, socket, role, sessionId }: RunPanelPr
   const [running, setRunning]   = useState(false)
   const [result, setResult]     = useState<RunResult | null>(null)
   const [error, setError]       = useState<string | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
 
-  const isSupported = SUPPORTED.has(language)
+  const isServer   = SERVER_LANGS.has(language)
+  const isClient   = CLIENT_LANGS.has(language)
+  const isSupported = isServer || isClient
   const langBadge   = LANG_LABEL[language] ?? language.toUpperCase()
 
   // ── Viewer: receive broadcast ─────────────────────────────────
@@ -46,35 +107,43 @@ export function RunPanel({ code, language, socket, role, sessionId }: RunPanelPr
     return () => { socket.off('code:run:result', handler) }
   }, [socket])
 
-  // ── Host: execute code ────────────────────────────────────────
+  // ── Host: run code ────────────────────────────────────────────
   const runCode = useCallback(async () => {
-    if (running || role !== 'host') return
-    if (!isSupported) return
+    if (running || role !== 'host' || !isSupported) return
+    setRunning(true); setError(null); setResult(null)
 
-    setRunning(true)
-    setError(null)
-    setResult(null)
+    let data: RunResult | null = null
 
     try {
-      const res  = await fetch('/api/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, language }),
-      })
-      const data = await res.json()
+      if (isClient) {
+        // Python: run client-side via Skulpt (no API, no server)
+        data = await runPythonInBrowser(code)
 
-      if (!res.ok) { setError(data.error ?? 'Execution failed'); return }
+      } else {
+        // JS/TS: run server-side via vm
+        abortRef.current = new AbortController()
+        const res = await fetch('/api/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code, language }),
+          signal: abortRef.current.signal,
+        })
+        data = await res.json()
+        if (!res.ok) { setError((data as { error?: string }).error ?? 'Execution failed'); return }
+      }
 
       setResult(data)
+      // Broadcast result to all viewers
       socket?.emit('code:run', { sessionId, result: data })
-    } catch {
-      setError('Network error — could not reach execution service')
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Execution error'
+      if (msg !== 'The user aborted a request.') setError(msg)
     } finally {
       setRunning(false)
     }
-  }, [running, role, code, language, socket, sessionId, isSupported])
+  }, [running, role, code, language, socket, sessionId, isSupported, isClient])
 
-  // ── Ctrl+Enter shortcut ───────────────────────────────────────
+  // ── Ctrl+Enter ────────────────────────────────────────────────
   useEffect(() => {
     if (role !== 'host') return
     const onKey = (e: KeyboardEvent) => {
@@ -95,7 +164,9 @@ export function RunPanel({ code, language, socket, role, sessionId }: RunPanelPr
         <span className="run-panel__title">
           <span className="run-dot" />
           Terminal
-          <span className="run-lang-badge">{langBadge}</span>
+          <span className={`run-lang-badge ${isClient ? 'run-lang-badge--client' : ''}`}>
+            {langBadge}
+          </span>
         </span>
 
         {result && (
@@ -105,14 +176,12 @@ export function RunPanel({ code, language, socket, role, sessionId }: RunPanelPr
           </span>
         )}
 
-        {/* Clear button */}
         {result && role === 'host' && (
           <button className="run-clear-btn" onClick={() => { setResult(null); setError(null) }} title="Clear output">
             ✕
           </button>
         )}
 
-        {/* Run button — host only, supported language */}
         {role === 'host' && isSupported && (
           <button
             id="run-code-btn"
@@ -123,44 +192,60 @@ export function RunPanel({ code, language, socket, role, sessionId }: RunPanelPr
           >
             {running
               ? <span className="run-spinner" />
-              : <svg width="11" height="12" viewBox="0 0 12 14" fill="currentColor"><path d="M1 1l10 6L1 13V1z"/></svg>
-            }
+              : <svg width="11" height="12" viewBox="0 0 12 14" fill="currentColor"><path d="M1 1l10 6L1 13V1z"/></svg>}
             {running ? 'Running…' : 'Run'}
             {!running && <kbd className="run-kbd">⌃↵</kbd>}
           </button>
         )}
       </div>
 
-      {/* Output terminal */}
-      <div className="terminal-output">
-          {!result && !error && !running && (
-            <p className="terminal-placeholder">
-              {role === 'host'
-                ? `Press Run or Ctrl+Enter to execute (${language})`
-                : 'Waiting for host to run code…'}
-            </p>
-          )}
-
-          {running && (
-            <p className="terminal-placeholder terminal-placeholder--running">
-              ⏳ Running {language}…
-            </p>
-          )}
-
-          {error && <p className="terminal-error">⚠ {error}</p>}
-
-          {result && !hasOutput && !error && (
-            <p className="terminal-placeholder terminal-placeholder--ok">✓ Finished with no output</p>
-          )}
-
-          {result && stdoutLines.map((line, i) => (
-            <TerminalLine key={`out-${i}`} line={line} />
-          ))}
-
-          {stderrLines.map((line, i) => (
-            <TerminalLine key={`err-${i}`} line={line} isErr />
-          ))}
+      {/* Unsupported language notice */}
+      {!isSupported && role === 'host' && (
+        <div className="terminal-unsupported">
+          <span>⚠</span>
+          <div>
+            <strong>{language}</strong> requires a compiler — not available in this environment.
+            <br />
+            <span className="terminal-unsupported__hint">
+              ✓ Supported: JavaScript · TypeScript · Python (Skulpt)
+            </span>
+          </div>
         </div>
+      )}
+
+      {/* Terminal output */}
+      <div className="terminal-output">
+        {!result && !error && !running && (
+          <p className="terminal-placeholder">
+            {role === 'host'
+              ? isSupported
+                ? `Press ▶ Run or Ctrl+Enter to execute (${language})`
+                : `${language} is not supported for execution`
+              : 'Waiting for host to run code…'}
+          </p>
+        )}
+
+        {running && (
+          <p className="terminal-placeholder terminal-placeholder--running">
+            {isClient ? '🐍' : '⚡'} Running {language}…
+            {isClient && <span style={{ fontSize: '10px', opacity: 0.7 }}> (loading Skulpt if first run)</span>}
+          </p>
+        )}
+
+        {error && <p className="terminal-error">⚠ {error}</p>}
+
+        {result && !hasOutput && !error && (
+          <p className="terminal-placeholder terminal-placeholder--ok">✓ Ran successfully — no output</p>
+        )}
+
+        {result && stdoutLines.map((line, i) => (
+          <TerminalLine key={`out-${i}`} line={line} />
+        ))}
+
+        {stderrLines.map((line, i) => (
+          <TerminalLine key={`err-${i}`} line={line} isErr />
+        ))}
+      </div>
     </div>
   )
 }
