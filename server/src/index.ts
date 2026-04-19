@@ -13,6 +13,15 @@ const SUPABASE_URL  = process.env.SUPABASE_URL  || ''
 const SUPABASE_KEY  = process.env.SUPABASE_ANON_KEY || ''
 const GROQ_KEY      = process.env.GROQ_API_KEY  || ''
 
+// Allow any Vercel preview URL + explicit FRONTEND_URL + localhost
+function isAllowedOrigin(origin: string | undefined): boolean {
+  if (!origin) return false
+  if (origin === FRONTEND_URL) return true
+  if (origin.endsWith('.vercel.app')) return true
+  if (origin.startsWith('http://localhost')) return true
+  return false
+}
+
 // ── Supabase ─────────────────────────────────────────────────
 const db = SUPABASE_URL && SUPABASE_KEY
   ? createClient(SUPABASE_URL, SUPABASE_KEY)
@@ -92,11 +101,11 @@ Be concise (3-4 sentences max), practical, and educational. Focus on explaining 
 
 // ── Express + Socket.io ───────────────────────────────────────
 const app = express()
-app.use(cors({ origin: FRONTEND_URL }))
+app.use(cors({ origin: isAllowedOrigin, credentials: true }))
 
 const httpServer = createServer(app)
 const io = new Server(httpServer, {
-  cors: { origin: FRONTEND_URL, methods: ['GET', 'POST'] },
+  cors: { origin: isAllowedOrigin, methods: ['GET', 'POST'], credentials: true },
 })
 
 // ── In-memory state ───────────────────────────────────────────
@@ -260,7 +269,8 @@ io.on('connection', (socket) => {
 })
 
 // ── Start ─────────────────────────────────────────────────────
+// Listen on 0.0.0.0 so Railway's reverse proxy can reach the container
 const PORT = Number(process.env.PORT) || 3001
-httpServer.listen(PORT, () => {
+httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 CodeCast server on port ${PORT} | DB: ${db ? '✅' : '❌'} | AI: ${groq ? '✅' : '❌'}`)
 })
