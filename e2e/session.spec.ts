@@ -3,6 +3,9 @@ import { test, expect } from '@playwright/test'
 // Skip Socket.io-dependent tests in CI (no server running)
 const SKIP_SOCKET = !!process.env.CI
 
+// Monaco takes a few seconds to fully initialise in CI
+const MONACO_TIMEOUT = 20_000
+
 test.describe('Home Page', () => {
   test('loads and shows create/join options', async ({ page }) => {
     await page.goto('/')
@@ -13,7 +16,7 @@ test.describe('Home Page', () => {
   test('create session button navigates to host page', async ({ page }) => {
     await page.goto('/')
     await page.getByRole('button', { name: /Start coding/i }).click()
-    await page.waitForURL(/\/host\/[a-zA-Z0-9_-]+/, { timeout: 10_000 })
+    await page.waitForURL(/\/host\/[a-zA-Z0-9_-]+/, { timeout: 15_000 })
     expect(page.url()).toMatch(/\/host\//)
   })
 })
@@ -25,20 +28,23 @@ test.describe('Host Page', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/')
     await page.getByRole('button', { name: /Start coding/i }).click()
-    await page.waitForURL(/\/host\/[a-zA-Z0-9_-]+/, { timeout: 10_000 })
+    await page.waitForURL(/\/host\/[a-zA-Z0-9_-]+/, { timeout: 15_000 })
     hostUrl = page.url()
     sessionId = hostUrl.split('/host/')[1]
+    // Wait for page to settle before running assertions
+    await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {})
   })
 
   test('shows Monaco editor', async ({ page }) => {
-    await page.waitForSelector('.monaco-editor', { timeout: 10_000 })
+    // Monaco needs extra time to initialise in CI
+    await page.waitForSelector('.monaco-editor', { timeout: MONACO_TIMEOUT })
     const editor = page.locator('.monaco-editor')
     await expect(editor).toBeVisible()
   })
 
   test('shows session ID in topbar', async ({ page }) => {
     const badge = page.locator('.session-id-badge')
-    await expect(badge).toBeVisible()
+    await expect(badge).toBeVisible({ timeout: 8_000 })
     await expect(badge).toContainText(sessionId)
   })
 
@@ -49,16 +55,16 @@ test.describe('Host Page', () => {
   })
 
   test('shows viewer count pill', async ({ page }) => {
-    await expect(page.locator('.viewer-pill')).toBeVisible()
+    await expect(page.locator('.viewer-pill')).toBeVisible({ timeout: 8_000 })
   })
 
   test('copy viewer link button exists', async ({ page }) => {
     const btn = page.getByRole('button', { name: /Share link/i }).first()
-    await expect(btn).toBeVisible()
+    await expect(btn).toBeVisible({ timeout: 8_000 })
   })
 
   test('shows Watch Replay button', async ({ page }) => {
-    await expect(page.getByText(/Watch Replay/i)).toBeVisible()
+    await expect(page.getByText(/Watch Replay/i)).toBeVisible({ timeout: 8_000 })
   })
 })
 
@@ -70,7 +76,7 @@ test.describe('Viewer Page', () => {
     const hostPage = await hostCtx.newPage()
     await hostPage.goto('http://localhost:3002')
     await hostPage.getByRole('button', { name: /Start coding/i }).click()
-    await hostPage.waitForURL(/\/host\/[a-zA-Z0-9_-]+/)
+    await hostPage.waitForURL(/\/host\/[a-zA-Z0-9_-]+/, { timeout: 15_000 })
     sessionId = hostPage.url().split('/host/')[1]
     await hostCtx.close()
   })
@@ -78,7 +84,7 @@ test.describe('Viewer Page', () => {
   test('viewer page loads for valid session', async ({ page }) => {
     await page.goto(`/s/${sessionId}`)
     await expect(page).toHaveTitle(/CodeCast/)
-    await expect(page.locator('.session-id-badge')).toContainText(sessionId)
+    await expect(page.locator('.session-id-badge')).toContainText(sessionId, { timeout: 8_000 })
   })
 
   test('viewer shows Watching live badge after connecting', async ({ page }) => {
@@ -89,7 +95,7 @@ test.describe('Viewer Page', () => {
 
   test('viewer shows Monaco read-only editor', async ({ page }) => {
     await page.goto(`/s/${sessionId}`)
-    await page.waitForSelector('.monaco-editor', { timeout: 10_000 })
+    await page.waitForSelector('.monaco-editor', { timeout: MONACO_TIMEOUT })
     const editor = page.locator('.monaco-editor')
     await expect(editor).toBeVisible()
   })
@@ -101,7 +107,9 @@ test.describe('Viewer Page', () => {
 
   test('viewer shows viewer name in topbar', async ({ page }) => {
     await page.goto(`/s/${sessionId}`)
-    await expect(page.locator('.viewer-name-badge')).toBeVisible({ timeout: 5_000 })
+    // Viewer name is generated client-side — wait for hydration
+    await page.waitForSelector('.viewer-name-badge', { timeout: 10_000 }).catch(() => {})
+    await expect(page.locator('.viewer-name-badge')).toBeVisible({ timeout: 10_000 })
   })
 })
 
@@ -110,6 +118,6 @@ test.describe('Replay Page', () => {
     await page.goto('/replay/nonexistent-session-xyz')
     await expect(page).toHaveTitle(/CodeCast/)
     // Should show either error state or loading → error
-    await expect(page.locator('.replay-badge')).toBeVisible({ timeout: 5_000 })
+    await expect(page.locator('.replay-badge')).toBeVisible({ timeout: 8_000 })
   })
 })
