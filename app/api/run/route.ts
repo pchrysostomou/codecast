@@ -58,7 +58,28 @@ function transpileTS(code: string): string {
   }).outputText as string
 }
 
-// ── main handler ──────────────────────────────────────────────
+// ── Cloud languages (Python, Java, Go, C, C++, Rust, Bash) ───
+// Proxied to Railway server which calls Wandbox (no timeout limit)
+const CLOUD_LANGS = new Set(['python', 'java', 'go', 'c', 'cpp', 'rust', 'bash'])
+const RAILWAY_URL = process.env.NEXT_PUBLIC_SOCKET_URL ?? 'https://codecast-production.up.railway.app'
+
+async function runViaRailway(code: string, language: string): Promise<PartialResult> {
+  const res = await fetch(`${RAILWAY_URL}/api/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, language }),
+    signal: AbortSignal.timeout(35_000),   // 35s Vercel limit is 60s on Pro, 10s on Hobby
+  })
+
+  if (!res.ok) {
+    return { stdout: '', stderr: `Railway proxy error: HTTP ${res.status}`, exitCode: 1 }
+  }
+
+  const data = await res.json() as RunResult
+  return { stdout: data.stdout ?? '', stderr: data.stderr ?? '', exitCode: data.exitCode ?? 1 }
+}
+
+// ── Main handler ──────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   const { code, language } = await req.json() as { code: string; language: string }
 
@@ -81,17 +102,14 @@ export async function POST(req: NextRequest) {
       }
       partial = runInVm(js)
 
+    } else if (CLOUD_LANGS.has(language)) {
+      // Proxy to Railway server for compilation languages
+      partial = await runViaRailway(code, language)
+
     } else {
-      // Other languages (Python, Java, Go, C, C++, Rust, Bash) need a compiler
-      // not available in the serverless environment
       partial = {
         stdout: '',
-        stderr: [
-          `⚠ ${language} execution requires a compiler not available in this environment.`,
-          ``,
-          `  ✓ Supported for execution: JavaScript, TypeScript`,
-          `  → Switch language to TypeScript or JavaScript to use the Run panel.`,
-        ].join('\n'),
+        stderr: `Language '${language}' is not supported.\n\nSupported: JavaScript, TypeScript, Python, Java, Go, C, C++, Rust, Bash`,
         exitCode: 1,
       }
     }
