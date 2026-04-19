@@ -35,8 +35,9 @@ test.describe('Host Page', () => {
     await page.waitForURL(/\/host\/[a-zA-Z0-9_-]+/, { timeout: 15_000 })
     hostUrl = page.url()
     sessionId = hostUrl.split('/host/')[1]
-    // Wait for page to settle before running assertions
-    await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {})
+    // Wait for the topbar to confirm the host page has fully hydrated
+    // (networkidle is unreliable when Socket.io keeps reconnecting)
+    await page.waitForSelector('.session-topbar', { timeout: 15_000 })
   })
 
   test('shows Monaco editor', async ({ page }) => {
@@ -59,15 +60,17 @@ test.describe('Host Page', () => {
   })
 
   test('shows viewer count pill', async ({ page }) => {
-    await expect(page.locator('.viewer-pill')).toBeVisible({ timeout: 8_000 })
+    // Give extra time — page must hydrate + Socket.io reconnects in background
+    await expect(page.locator('.viewer-pill')).toBeVisible({ timeout: 15_000 })
   })
 
   test('copy viewer link button exists', async ({ page }) => {
     const btn = page.getByRole('button', { name: /Share link/i }).first()
-    await expect(btn).toBeVisible({ timeout: 8_000 })
+    await expect(btn).toBeVisible({ timeout: 15_000 })
   })
 
   test('shows Watch Replay button', async ({ page }) => {
+
     await expect(page.getByText(/Watch Replay/i)).toBeVisible({ timeout: 8_000 })
   })
 })
