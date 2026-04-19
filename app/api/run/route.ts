@@ -4,7 +4,6 @@ import * as vm from 'vm'
 
 export const dynamic = 'force-dynamic'
 
-// ── Types ──────────────────────────────────────────────────────
 export interface RunResult {
   stdout: string
   stderr: string
@@ -12,23 +11,16 @@ export interface RunResult {
   language: string
   runtime: number
 }
-type Partial = Omit<RunResult, 'language' | 'runtime'>
 
-// ── Languages handled locally (no external API) ─────────────────
-const LOCAL_LANGS = new Set(['javascript', 'typescript'])
+type PartialResult = Omit<RunResult, 'language' | 'runtime'>
 
-// ── Railway server URL (for cloud compilation) ──────────────────
-const RAILWAY_URL = process.env.NEXT_PUBLIC_SOCKET_URL ?? 'https://codecast-production.up.railway.app'
-
-// ──────────────────────────────────────────────────────────────
-//  JavaScript — Node.js vm sandbox (instant)
-// ──────────────────────────────────────────────────────────────
+// ── helpers ───────────────────────────────────────────────────
 function stringify(v: unknown): string {
   if (typeof v === 'string') return v
   try { return JSON.stringify(v, null, 2) } catch { return String(v) }
 }
 
-function runInVm(js: string): Partial {
+function runInVm(js: string): PartialResult {
   const out: string[] = []
   const err: string[] = []
 
@@ -53,7 +45,6 @@ function runInVm(js: string): Partial {
   }
 }
 
-// ── TypeScript → JavaScript ─────────────────────────────────────
 function transpileTS(code: string): string {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const ts = require('typescript') as any
@@ -67,7 +58,7 @@ function transpileTS(code: string): string {
   }).outputText as string
 }
 
-// ── Main handler ───────────────────────────────────────────────
+// ── main handler ──────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   const { code, language } = await req.json() as { code: string; language: string }
 
@@ -76,7 +67,7 @@ export async function POST(req: NextRequest) {
   }
 
   const t0 = Date.now()
-  let partial: Partial
+  let partial: PartialResult
 
   try {
     if (language === 'javascript') {
@@ -84,41 +75,30 @@ export async function POST(req: NextRequest) {
 
     } else if (language === 'typescript') {
       let js: string
-      try { js = transpileTS(code) }
-      catch (e) {
+      try { js = transpileTS(code) } catch (e) {
         partial = { stdout: '', stderr: `TypeScript error: ${e instanceof Error ? e.message : e}`, exitCode: 1 }
         return Response.json({ ...partial, language, runtime: Date.now() - t0 } satisfies RunResult)
       }
       partial = runInVm(js)
 
     } else {
-      // ── Proxy to Railway for Python, Java, Go, C, C++, Rust, Bash ──
-      // Railway has no serverless timeout limit → can wait for compilation
-      const railRes = await fetch(`${RAILWAY_URL}/api/run`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, language }),
-        signal: AbortSignal.timeout(9000),  // stay within Vercel 10s limit
-      })
-
-      if (!railRes.ok) {
-        partial = { stdout: '', stderr: `Execution proxy error: HTTP ${railRes.status}`, exitCode: 1 }
-      } else {
-        const data = await railRes.json()
-        return Response.json(data)  // Railway already returns full RunResult
+      // Other languages (Python, Java, Go, C, C++, Rust, Bash) need a compiler
+      // not available in the serverless environment
+      partial = {
+        stdout: '',
+        stderr: [
+          `⚠ ${language} execution requires a compiler not available in this environment.`,
+          ``,
+          `  ✓ Supported for execution: JavaScript, TypeScript`,
+          `  → Switch language to TypeScript or JavaScript to use the Run panel.`,
+        ].join('\n'),
+        exitCode: 1,
       }
     }
   } catch (err) {
     console.error('[api/run]', err)
-    partial = {
-      stdout: '',
-      stderr: err instanceof Error ? err.message : 'Execution error',
-      exitCode: 1,
-    }
+    partial = { stdout: '', stderr: err instanceof Error ? err.message : 'Execution error', exitCode: 1 }
   }
 
   return Response.json({ ...partial, language, runtime: Date.now() - t0 } satisfies RunResult)
 }
-
-// Suppress unused import warning
-void LOCAL_LANGS

@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback } from 'react'
 import type { Socket } from 'socket.io-client'
 import type { RunResult } from '@/app/api/run/route'
 
-// All languages supported: JS/TS via vm, rest via Wandbox cloud compiler
-const SUPPORTED = new Set(['javascript', 'typescript', 'python', 'java', 'go', 'c', 'cpp', 'rust', 'bash'])
+// JS/TS run instantly via Node.js vm (no external API needed)
+const SUPPORTED = new Set(['javascript', 'typescript'])
 const LANG_LABEL: Record<string, string> = {
   javascript: 'JS',
   typescript: 'TS',
