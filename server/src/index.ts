@@ -245,6 +245,17 @@ io.on('connection', (socket) => {
     }
   )
 
+  // ── code:run  (host runs code → broadcast result to viewers) ─
+  socket.on('code:run', ({ sessionId, result }: {
+    sessionId: string
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    result: any
+  }) => {
+    console.log(`[run] ${socket.id} → session ${sessionId} exit=${result?.exitCode}`)
+    // Relay to all OTHER sockets in the room (viewers)
+    socket.to(sessionId).emit('code:run:result', result)
+  })
+
   // ── disconnect ───────────────────────────────────────────────
   socket.on('disconnect', () => {
     console.log(`[disconnect] ${socket.id}`)

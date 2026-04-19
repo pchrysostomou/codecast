@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation'
 import { CodeEditor } from '@/components/CodeEditor'
 import { AnnotationPanel } from '@/components/AnnotationPanel'
 import { QAPanel, type QAEntry } from '@/components/QAPanel'
+import { RunPanel } from '@/components/RunPanel'
 import { useSocket } from '@/hooks/useSocket'
 import { useAIAnnotation } from '@/hooks/useAIAnnotation'
 import { supabase } from '@/lib/supabase'
@@ -30,12 +31,13 @@ export default function HostPage() {
   const [annotations, setAnnotations] = useState<Annotation[]>([])
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [qaEntries, setQaEntries] = useState<QAEntry[]>([])
-  const [activeTab, setActiveTab] = useState<'ai' | 'qa'>('ai')
+  const [activeTab, setActiveTab] = useState<'ai' | 'qa' | 'run'>('ai')
   const hasJoined = useRef(false)
   const analyzeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const snapshotTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const codeRef = useRef<string>('')
   const languageRef = useRef<string>('typescript')
+  const [liveCode, setLiveCode] = useState('')
 
   const viewerUrl =
     typeof window !== 'undefined'
@@ -92,6 +94,7 @@ export default function HostPage() {
   // Called by CodeEditor on every change
   const handleCodeChange = useCallback((code: string) => {
     codeRef.current = code
+    setLiveCode(code)
 
     // Show "analyzing" spinner 2s after last keystroke
     if (analyzeTimerRef.current) clearTimeout(analyzeTimerRef.current)
@@ -195,7 +198,7 @@ export default function HostPage() {
             </a>
           </div>
 
-          {/* Tab switcher: AI | Q&A */}
+          {/* Tab switcher: AI | Q&A | Run */}
           <div className="sidebar-tabs">
             <button
               className={`sidebar-tab ${activeTab === 'ai' ? 'sidebar-tab--active' : ''}`}
@@ -209,11 +212,19 @@ export default function HostPage() {
             >
               💬 Q&amp;A {qaEntries.length > 0 && <span className="tab-badge">{qaEntries.length}</span>}
             </button>
+            <button
+              className={`sidebar-tab ${activeTab === 'run' ? 'sidebar-tab--active' : ''}`}
+              onClick={() => setActiveTab('run')}
+              id="run-tab-btn"
+            >
+              ▶ Run
+            </button>
           </div>
 
-          {activeTab === 'ai' ? (
+          {activeTab === 'ai' && (
             <AnnotationPanel annotations={annotations} isAnalyzing={isAnalyzing} />
-          ) : (
+          )}
+          {activeTab === 'qa' && (
             <QAPanel
               sessionId={sessionId}
               currentCode={''}
@@ -222,6 +233,15 @@ export default function HostPage() {
               entries={qaEntries}
               viewerName="host"
               role="host"
+            />
+          )}
+          {activeTab === 'run' && (
+            <RunPanel
+              code={liveCode}
+              language={language}
+              socket={socket}
+              role="host"
+              sessionId={sessionId}
             />
           )}
         </aside>

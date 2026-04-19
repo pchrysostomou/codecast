@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation'
 import { CodeViewer } from '@/components/CodeViewer'
 import { AnnotationPanel } from '@/components/AnnotationPanel'
 import { QAPanel, type QAEntry } from '@/components/QAPanel'
+import { RunPanel } from '@/components/RunPanel'
 import { useSocket } from '@/hooks/useSocket'
 import { useViewerName } from '@/hooks/useViewerName'
 import type { Annotation } from '@/lib/annotate'
@@ -21,7 +22,7 @@ export default function ViewerPage() {
   const [annotations, setAnnotations] = useState<Annotation[]>([])
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [qaEntries, setQaEntries] = useState<QAEntry[]>([])
-  const [activeTab, setActiveTab] = useState<'ai' | 'qa'>('ai')
+  const [activeTab, setActiveTab] = useState<'ai' | 'qa' | 'run'>('ai')
   const hasJoined = useRef(false)
 
   useEffect(() => {
@@ -116,7 +117,7 @@ export default function ViewerPage() {
             </div>
           </div>
 
-          {/* Tab switcher: AI | Q&A */}
+          {/* Tab switcher: AI | Q&A | Run */}
           <div className="sidebar-tabs">
             <button
               className={`sidebar-tab ${activeTab === 'ai' ? 'sidebar-tab--active' : ''}`}
@@ -130,12 +131,18 @@ export default function ViewerPage() {
             >
               💬 Q&amp;A {qaEntries.length > 0 && <span className="tab-badge">{qaEntries.length}</span>}
             </button>
+            <button
+              className={`sidebar-tab ${activeTab === 'run' ? 'sidebar-tab--active' : ''}`}
+              onClick={() => setActiveTab('run')}
+            >
+              ▶ Run
+            </button>
           </div>
 
-          {/* Panel content */}
-          {activeTab === 'ai' ? (
+          {activeTab === 'ai' && (
             <AnnotationPanel annotations={annotations} isAnalyzing={isAnalyzing} />
-          ) : (
+          )}
+          {activeTab === 'qa' && (
             <QAPanel
               sessionId={sessionId}
               currentCode={code}
@@ -144,6 +151,15 @@ export default function ViewerPage() {
               entries={qaEntries}
               viewerName={viewerName}
               role="viewer"
+            />
+          )}
+          {activeTab === 'run' && (
+            <RunPanel
+              code={code}
+              language={language}
+              socket={socket}
+              role="viewer"
+              sessionId={sessionId}
             />
           )}
         </aside>
