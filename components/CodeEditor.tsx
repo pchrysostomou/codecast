@@ -30,7 +30,13 @@ export function CodeEditor({ sessionId, socket, language = 'typescript', onLangu
   }
 
   const handleChange = useCallback((value: string | undefined) => {
-    if (!value || !socket) return
+    if (!value) return
+
+    // Always notify parent for liveCode state + AI annotations
+    // (independent of socket — user should be able to Run even while Connecting)
+    onCodeChange?.(value)
+
+    if (!socket) return
 
     // Throttle to 100ms — send last state, not every keystroke
     if (throttleTimer) clearTimeout(throttleTimer)
@@ -41,9 +47,6 @@ export function CodeEditor({ sessionId, socket, language = 'typescript', onLangu
         timestamp: Date.now(),
       })
     }, 100)
-
-    // Notify parent for AI annotation scheduling (debounced separately)
-    onCodeChange?.(value)
   }, [socket, sessionId, onCodeChange])
 
   return (
