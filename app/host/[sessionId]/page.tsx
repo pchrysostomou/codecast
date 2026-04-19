@@ -7,6 +7,7 @@ import { AnnotationPanel } from '@/components/AnnotationPanel'
 import { QAPanel, type QAEntry } from '@/components/QAPanel'
 import { useSocket } from '@/hooks/useSocket'
 import { useAIAnnotation } from '@/hooks/useAIAnnotation'
+import { supabase } from '@/lib/supabase'
 import type { Annotation } from '@/lib/annotate'
 
 function CopyIcon() {
@@ -47,12 +48,17 @@ export default function HostPage() {
     if (!sock || !isConnected || hasJoined.current) return
     hasJoined.current = true
     sock.emit('session:join', { sessionId, role: 'host', language })
-    // Persist session via Next.js API (has Supabase network access)
-    fetch('/api/sessions/create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId, language }),
-    }).catch(console.error)
+    // Persist session directly from browser (has Supabase network access)
+    supabase.from('codecast_sessions').upsert({
+      id: sessionId,
+      language,
+      created_at: new Date().toISOString(),
+      ended_at: null,
+      code_snapshot: null,
+    }, { onConflict: 'id' }).then(({ error }) => {
+      if (error) console.error('[session persist]', error.message)
+      else console.log('[session persist] ok:', sessionId)
+    })
   }, [isConnected, sessionId, socketRef, language])
 
   // Listen for annotation:received + Q&A events
@@ -93,15 +99,19 @@ export default function HostPage() {
 
     scheduleAnnotation(code, language)
 
-    // Save snapshot every 5s via Next.js API (Supabase network access)
+    // Save snapshot every 5s directly via browser Supabase client
     if (snapshotTimerRef.current) clearTimeout(snapshotTimerRef.current)
     snapshotTimerRef.current = setTimeout(() => {
       const lang = languageRef.current
-      fetch('/api/sessions/snapshot', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, code, language: lang }),
-      }).catch(console.error)
+      supabase.from('codecast_snapshots').insert({
+        session_id: sessionId,
+        code,
+        language: lang,
+        captured_at: new Date().toISOString(),
+      }).then(({ error }) => {
+        if (error) console.error('[snapshot]', error.message)
+        else console.log('[snapshot] saved for', sessionId)
+      })
     }, 5000)
   }, [scheduleAnnotation, language, sessionId])
 
