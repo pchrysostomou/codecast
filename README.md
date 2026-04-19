@@ -2,7 +2,7 @@
 
 > **Live coding sessions with AI annotations.** Write code, let viewers watch every keystroke in real-time, and have AI explain every change automatically.
 
-[![CI](https://github.com/yourusername/codecast/actions/workflows/ci.yml/badge.svg)](https://github.com/yourusername/codecast/actions/workflows/ci.yml)
+[![CI](https://github.com/pchrysostomou/codecast/actions/workflows/ci.yml/badge.svg)](https://github.com/pchrysostomou/codecast/actions/workflows/ci.yml)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)](https://nextjs.org/)
 [![Socket.io](https://img.shields.io/badge/Socket.io-4-010101?logo=socket.io)](https://socket.io/)
