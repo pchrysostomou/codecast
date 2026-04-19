@@ -19,14 +19,16 @@ const db = SUPABASE_URL && SUPABASE_KEY
   : null
 
 async function dbCreateSession(sessionId: string, language: string) {
-  if (!db) return
-  await db.from('codecast_sessions').upsert({
+  if (!db) { console.warn('[db] No Supabase client — skipping session persist'); return }
+  const { error } = await db.from('codecast_sessions').upsert({
     id: sessionId,
     language,
     created_at: new Date().toISOString(),
     ended_at: null,
     code_snapshot: null,
   }, { onConflict: 'id' })
+  if (error) console.error('[db] dbCreateSession error:', error.message, error.details)
+  else console.log(`[db] session persisted: ${sessionId}`)
 }
 
 async function dbEndSession(sessionId: string, codeSnapshot: string) {

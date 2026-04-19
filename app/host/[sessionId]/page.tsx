@@ -32,18 +32,27 @@ export default function HostPage() {
   const [activeTab, setActiveTab] = useState<'ai' | 'qa'>('ai')
   const hasJoined = useRef(false)
   const analyzeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const snapshotTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const codeRef = useRef<string>('')
+  const languageRef = useRef<string>('typescript')
 
   const viewerUrl =
     typeof window !== 'undefined'
       ? `${window.location.origin}/s/${sessionId}`
       : `/s/${sessionId}`
 
-  // Join session as host when socket connects
+  // Join session as host when socket connects + persist to Supabase
   useEffect(() => {
     const sock = socketRef.current
     if (!sock || !isConnected || hasJoined.current) return
     hasJoined.current = true
     sock.emit('session:join', { sessionId, role: 'host', language })
+    // Persist session via Next.js API (has Supabase network access)
+    fetch('/api/sessions/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId, language }),
+    }).catch(console.error)
   }, [isConnected, sessionId, socketRef, language])
 
   // Listen for annotation:received + Q&A events
@@ -76,12 +85,25 @@ export default function HostPage() {
 
   // Called by CodeEditor on every change
   const handleCodeChange = useCallback((code: string) => {
+    codeRef.current = code
+
     // Show "analyzing" spinner 2s after last keystroke
     if (analyzeTimerRef.current) clearTimeout(analyzeTimerRef.current)
     analyzeTimerRef.current = setTimeout(() => setIsAnalyzing(true), 2000)
 
     scheduleAnnotation(code, language)
-  }, [scheduleAnnotation, language])
+
+    // Save snapshot every 5s via Next.js API (Supabase network access)
+    if (snapshotTimerRef.current) clearTimeout(snapshotTimerRef.current)
+    snapshotTimerRef.current = setTimeout(() => {
+      const lang = languageRef.current
+      fetch('/api/sessions/snapshot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, code, language: lang }),
+      }).catch(console.error)
+    }, 5000)
+  }, [scheduleAnnotation, language, sessionId])
 
   function handleCopy() {
     navigator.clipboard.writeText(viewerUrl)
