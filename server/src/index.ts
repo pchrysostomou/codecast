@@ -4,6 +4,7 @@ import { Server } from 'socket.io'
 import cors from 'cors'
 import Groq from 'groq-sdk'
 import { createClient } from '@supabase/supabase-js'
+import { saveSnapshot } from './snapshots.js'
 
 // ── Load env ─────────────────────────────────────────────────
 // tsx loads .env automatically in dev; in prod set via Railway
@@ -101,6 +102,7 @@ const sessionCode     = new Map<string, string>()          // sessionId → code
 const sessionLanguage = new Map<string, string>()          // sessionId → language
 const hostSockets     = new Map<string, string>()          // sessionId → host socket.id
 const sessionViewers  = new Map<string, Set<string>>()     // sessionId → viewer socket ids
+const snapshotTimers  = new Map<string, ReturnType<typeof setTimeout>>()
 
 function getViewerCount(sessionId: string) {
   return sessionViewers.get(sessionId)?.size ?? 0
@@ -152,6 +154,14 @@ io.on('connection', (socket) => {
     ({ sessionId, code }: { sessionId: string; code: string }) => {
       sessionCode.set(sessionId, code)
       socket.to(sessionId).emit('code:update', { code })
+
+      // Throttled snapshot: save to Supabase at most once per 5s per session
+      if (snapshotTimers.has(sessionId)) clearTimeout(snapshotTimers.get(sessionId)!)
+      snapshotTimers.set(sessionId, setTimeout(() => {
+        const lang = sessionLanguage.get(sessionId) ?? 'typescript'
+        saveSnapshot(sessionId, code, lang).catch(console.error)
+        snapshotTimers.delete(sessionId)
+      }, 5000))
     }
   )
 

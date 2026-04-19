@@ -152,6 +152,15 @@ export default function HostPage() {
             <button className="btn btn--primary btn--full" onClick={handleCopy}>
               {copied ? '✓ Copied!' : 'Copy viewer link'}
             </button>
+            <a
+              href={`/replay/${sessionId}`}
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn--ghost btn--full"
+              style={{ marginTop: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+            >
+              ⏮ Watch Replay
+            </a>
           </div>
 
           {/* Tab switcher: AI | Q&A */}
