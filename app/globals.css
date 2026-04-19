@@ -929,7 +929,55 @@ html, body {
   margin: 0;
 }
 
+/* Language badge next to "Terminal" title */
+.run-lang-badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  background: rgba(96,165,250,.15);
+  color: var(--accent);
+  border: 1px solid rgba(96,165,250,.25);
+  border-radius: 4px;
+  padding: 1px 5px;
+  text-transform: uppercase;
+}
+
+/* Clear ✕ button */
+.run-clear-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  border: 1px solid rgba(255,255,255,.1);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background .12s, color .12s;
+  line-height: 1;
+}
+.run-clear-btn:hover { background: rgba(255,255,255,.08); color: #e2e8f0; }
+
+/* Unsupported language notice */
+.terminal-unsupported {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  background: rgba(245,158,11,.06);
+  border-bottom: 1px solid rgba(245,158,11,.15);
+  font-size: 12px;
+  color: #fbbf24;
+  line-height: 1.5;
+  flex-shrink: 0;
+}
+.terminal-unsupported strong { color: #fcd34d; }
+.terminal-unsupported__hint { font-size: 11px; color: #78716c; }
+
 /* ── W7 Reactions ────────────────────────────────────────────── */
+
 
 @keyframes reaction-float {
   0%   { transform: translateY(0)   scale(1);    opacity: 1; }

@@ -1,6 +1,11 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 import { NextRequest } from 'next/server'
 import * as vm from 'vm'
+import { execFile } from 'child_process'
+import { writeFile, unlink } from 'fs/promises'
+import { tmpdir } from 'os'
+import { join } from 'path'
+import crypto from 'crypto'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,129 +15,120 @@ export interface RunResult {
   stderr: string
   exitCode: number
   language: string
-  runtime: number   // ms
+  runtime: number
 }
 
-// ── JS/TS execution via Node.js vm (no external API) ───────────
-function runJavaScript(code: string): Omit<RunResult, 'language' | 'runtime'> {
-  const outLines: string[] = []
-  const errLines: string[] = []
+type PartialResult = Omit<RunResult, 'language' | 'runtime'>
 
-  const sandbox = {
-    console: {
-      log:   (...args: unknown[]) => outLines.push(args.map(stringify).join(' ')),
-      error: (...args: unknown[]) => errLines.push(args.map(stringify).join(' ')),
-      warn:  (...args: unknown[]) => outLines.push('[warn] ' + args.map(stringify).join(' ')),
-      info:  (...args: unknown[]) => outLines.push(args.map(stringify).join(' ')),
-    },
-    setTimeout:   undefined,
-    setInterval:  undefined,
-    fetch:        undefined,
-    process:      undefined,
-    global:       undefined,
-    require:      undefined,
-    __dirname:    undefined,
-    __filename:   undefined,
-  }
-
-  try {
-    const ctx = vm.createContext(sandbox)
-    const script = new vm.Script(code, { filename: 'main.js' })
-    script.runInContext(ctx, { timeout: 5000 })
-
-    return {
-      stdout: outLines.join('\n'),
-      stderr: errLines.join('\n'),
-      exitCode: errLines.length > 0 ? 1 : 0,
-    }
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err)
-    return { stdout: outLines.join('\n'), stderr: msg, exitCode: 1 }
-  }
-}
-
+// ── Helper: run code in Node.js vm (JS / transpiled TS) ────────
 function stringify(v: unknown): string {
   if (typeof v === 'string') return v
   try { return JSON.stringify(v, null, 2) } catch { return String(v) }
 }
 
-// ── TypeScript: strip types with the bundled typescript package ─
+function runInVm(jsCode: string): PartialResult {
+  const out: string[] = []
+  const err: string[] = []
+
+  const sandbox = {
+    console: {
+      log:   (...a: unknown[]) => out.push(a.map(stringify).join(' ')),
+      error: (...a: unknown[]) => err.push(a.map(stringify).join(' ')),
+      warn:  (...a: unknown[]) => out.push('[warn] ' + a.map(stringify).join(' ')),
+      info:  (...a: unknown[]) => out.push(a.map(stringify).join(' ')),
+    },
+    Math,
+    Date,
+    JSON,
+    parseInt,
+    parseFloat,
+    isNaN,
+    isFinite,
+    Array,
+    Object,
+    String,
+    Number,
+    Boolean,
+    RegExp,
+    Error,
+    setTimeout: undefined,
+    setInterval: undefined,
+    fetch:       undefined,
+    process:     undefined,
+    global:      undefined,
+    require:     undefined,
+  }
+
+  try {
+    vm.runInNewContext(jsCode, sandbox, { timeout: 5000, filename: 'main.js' })
+    return { stdout: out.join('\n'), stderr: err.join('\n'), exitCode: err.length ? 1 : 0 }
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return { stdout: out.join('\n'), stderr: msg, exitCode: 1 }
+  }
+}
+
+// ── Helper: transpile TypeScript → JavaScript ───────────────────
 function transpileTS(code: string): string {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const ts = require('typescript') as any
-  const result = ts.transpileModule(code, {
+  return ts.transpileModule(code, {
     compilerOptions: {
       module: ts.ModuleKind.CommonJS,
       target: ts.ScriptTarget.ES2020,
       strict: false,
       esModuleInterop: true,
     },
-    reportDiagnostics: false,
-  })
-  return result.outputText as string
+  }).outputText as string
 }
 
-// ── Piston fallback (for Python, Java, Go, etc.) ───────────────
-const PISTON_URL = 'https://emkc.org/api/v2/piston/execute'
-
-const RUNTIME_MAP: Record<string, { language: string; version: string }> = {
-  python: { language: 'python',  version: '3.10.0' },
-  java:   { language: 'java',    version: '15.0.2' },
-  c:      { language: 'c',       version: '10.2.0' },
-  cpp:    { language: 'cpp',     version: '10.2.0' },
-  rust:   { language: 'rust',    version: '1.50.0' },
-  go:     { language: 'go',      version: '1.16.2' },
-  bash:   { language: 'bash',    version: '5.2.0' },
-}
-
-async function runViaPiston(
+// ── Helper: run code file with a process (Python, Bash) ─────────
+function runProcess(
+  executable: string,
+  args: string[],
   code: string,
-  language: string,
-): Promise<Omit<RunResult, 'language' | 'runtime'>> {
-  const rt = RUNTIME_MAP[language]
-  if (!rt) {
-    return { stdout: '', stderr: `Language '${language}' is not supported for execution.`, exitCode: 1 }
-  }
+  ext: string,
+): Promise<PartialResult> {
+  return new Promise(async (resolve) => {
+    const id    = crypto.randomUUID()
+    const file  = join(tmpdir(), `cc_${id}.${ext}`)
 
-  // Try to get a matching runtime version from Piston first
-  let version = rt.version
-  try {
-    const rtRes = await fetch(`https://emkc.org/api/v2/piston/runtimes`, { signal: AbortSignal.timeout(5000) })
-    if (rtRes.ok) {
-      const runtimes: Array<{ language: string; version: string }> = await rtRes.json()
-      const match = runtimes.find(r => r.language === rt.language)
-      if (match) version = match.version
+    try {
+      await writeFile(file, code, 'utf8')
+    } catch {
+      return resolve({ stdout: '', stderr: 'Could not write temp file', exitCode: 1 })
     }
-  } catch { /* ignore — use hardcoded version */ }
 
-  const res = await fetch(PISTON_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      language: rt.language,
-      version,
-      files: [{ name: 'main', content: code }],
-      stdin: '',
-      args: [],
-      compile_timeout: 10000,
-      run_timeout: 5000,
-    }),
-    signal: AbortSignal.timeout(15000),
+    execFile(
+      executable,
+      [...args, file],
+      { timeout: 8000, maxBuffer: 512 * 1024 },
+      (err, stdout, stderr) => {
+        unlink(file).catch(() => {})
+
+        const exitCode = typeof err?.code === 'number' ? err.code : (err ? 1 : 0)
+        let stderrOut = stderr ?? ''
+
+        // Remove temp file path from error messages for cleaner output
+        if (stderrOut) stderrOut = stderrOut.replaceAll(file, '<file>')
+
+        resolve({ stdout: stdout ?? '', stderr: stderrOut, exitCode })
+      },
+    )
   })
+}
 
-  if (!res.ok) {
-    return {
-      stdout: '',
-      stderr: `Execution service error: ${res.status}`,
-      exitCode: 1,
-    }
-  }
-
-  const data = await res.json()
+// ── Helper: not supported in serverless env ─────────────────────
+function unsupported(lang: string): PartialResult {
   return {
-    stdout: data.run?.stdout ?? '',
-    stderr: data.run?.stderr ?? (data.compile?.stderr ?? ''),
-    exitCode: data.run?.code ?? -1,
+    stdout: '',
+    stderr: [
+      `⚠ ${lang} requires a compiler (javac, gcc, go, rustc) which is not`,
+      `  available in the serverless environment.`,
+      ``,
+      `  Supported languages: JavaScript, TypeScript, Python, Bash`,
+    ].join('\n'),
+    exitCode: 1,
   }
 }
 
@@ -145,31 +141,47 @@ export async function POST(req: NextRequest) {
   }
 
   const t0 = Date.now()
-  let partial: Omit<RunResult, 'language' | 'runtime'>
+  let partial: PartialResult
 
   try {
-    if (language === 'javascript') {
-      // Run directly in Node.js vm sandbox
-      partial = runJavaScript(code)
-    } else if (language === 'typescript') {
-      // Transpile TS → JS then run in vm
-      const js = transpileTS(code)
-      partial = runJavaScript(js)
-    } else {
-      // Use Piston API for all other languages
-      partial = await runViaPiston(code, language)
+    switch (language) {
+      case 'javascript':
+        partial = runInVm(code)
+        break
+
+      case 'typescript': {
+        let js: string
+        try { js = transpileTS(code) } catch (e) {
+          partial = { stdout: '', stderr: `TypeScript compile error: ${e instanceof Error ? e.message : e}`, exitCode: 1 }
+          break
+        }
+        partial = runInVm(js)
+        break
+      }
+
+      case 'python':
+        partial = await runProcess('python3', [], code, 'py')
+        break
+
+      case 'bash':
+        partial = await runProcess('/bin/bash', [], code, 'sh')
+        break
+
+      // Compiled languages — not available in serverless
+      case 'java':   partial = unsupported('Java');   break
+      case 'go':     partial = unsupported('Go');     break
+      case 'c':      partial = unsupported('C');      break
+      case 'cpp':    partial = unsupported('C++');    break
+      case 'rust':   partial = unsupported('Rust');   break
+
+      default:
+        partial = { stdout: '', stderr: `Unknown language: ${language}`, exitCode: 1 }
     }
   } catch (err: unknown) {
-    console.error('[api/run] error:', err)
-    const msg = err instanceof Error ? err.message : 'Internal execution error'
-    partial = { stdout: '', stderr: msg, exitCode: 1 }
+    console.error('[api/run]', err)
+    partial = { stdout: '', stderr: err instanceof Error ? err.message : 'Execution error', exitCode: 1 }
   }
 
-  const result: RunResult = {
-    ...partial,
-    language,
-    runtime: Date.now() - t0,
-  }
-
+  const result: RunResult = { ...partial, language, runtime: Date.now() - t0 }
   return Response.json(result)
 }
