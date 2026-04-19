@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback } from 'react'
 import type { Socket } from 'socket.io-client'
 import type { RunResult } from '@/app/api/run/route'
 
-// Languages supported natively (no external API needed)
-const SUPPORTED = new Set(['javascript', 'typescript', 'python', 'bash'])
+// All languages supported: JS/TS via vm, rest via Wandbox cloud compiler
+const SUPPORTED = new Set(['javascript', 'typescript', 'python', 'java', 'go', 'c', 'cpp', 'rust', 'bash'])
 const LANG_LABEL: Record<string, string> = {
   javascript: 'JS',
   typescript: 'TS',
@@ -131,24 +131,8 @@ export function RunPanel({ code, language, socket, role, sessionId }: RunPanelPr
         )}
       </div>
 
-      {/* Language not supported notice */}
-      {!isSupported && role === 'host' && (
-        <div className="terminal-unsupported">
-          <span>⚠</span>
-          <div>
-            <strong>{language}</strong> requires a compiler and is not available
-            in the serverless environment.
-            <br />
-            <span className="terminal-unsupported__hint">
-              Supported: JavaScript · TypeScript · Python · Bash
-            </span>
-          </div>
-        </div>
-      )}
-
       {/* Output terminal */}
-      {(isSupported || role === 'viewer') && (
-        <div className="terminal-output">
+      <div className="terminal-output">
           {!result && !error && !running && (
             <p className="terminal-placeholder">
               {role === 'host'
@@ -177,7 +161,6 @@ export function RunPanel({ code, language, socket, role, sessionId }: RunPanelPr
             <TerminalLine key={`err-${i}`} line={line} isErr />
           ))}
         </div>
-      )}
     </div>
   )
 }
