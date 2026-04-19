@@ -6,6 +6,7 @@ import { CodeEditor } from '@/components/CodeEditor'
 import { AnnotationPanel } from '@/components/AnnotationPanel'
 import { QAPanel, type QAEntry } from '@/components/QAPanel'
 import { RunPanel } from '@/components/RunPanel'
+import { ReactionsOverlay } from '@/components/ReactionsOverlay'
 import { useSocket } from '@/hooks/useSocket'
 import { useAIAnnotation } from '@/hooks/useAIAnnotation'
 import { supabase } from '@/lib/supabase'
@@ -151,15 +152,17 @@ export default function HostPage() {
 
       {/* Editor + sidebar */}
       <div className="session-body">
-        <CodeEditor
-          sessionId={sessionId}
-          socket={socket}
-          language={language}
-          onLanguageChange={setLanguage}
-          onCodeChange={handleCodeChange}
-        />
-
-        {/* Right sidebar */}
+        {/* Editor wrapped with reactions overlay */}
+        <div style={{ position: 'relative', flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          <CodeEditor
+            sessionId={sessionId}
+            socket={socket}
+            language={language}
+            onLanguageChange={setLanguage}
+            onCodeChange={handleCodeChange}
+          />
+          <ReactionsOverlay socket={socket} sessionId={sessionId} role="host" />
+        </div>
         <aside className="session-sidebar">
           {/* Session info */}
           <div className="sidebar-section">

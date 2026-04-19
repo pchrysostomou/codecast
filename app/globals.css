@@ -1,4 +1,4 @@
-﻿@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 /* â”€â”€ Design tokens (VS Code dark) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 :root {
@@ -929,8 +929,98 @@ html, body {
   margin: 0;
 }
 
+/* ── W7 Reactions ────────────────────────────────────────────── */
+
+@keyframes reaction-float {
+  0%   { transform: translateY(0)   scale(1);    opacity: 1; }
+  60%  { transform: translateY(-80px) scale(1.3); opacity: .9; }
+  100% { transform: translateY(-180px) scale(.8); opacity: 0; }
+}
+
+/* Overlay — sits on top of editor, pointer-events: none so clicks pass through */
+.reactions-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 30;
+}
+
+.reaction-float {
+  position: absolute;
+  bottom: 80px;            /* starts just above reaction bar */
+  font-size: 36px;
+  line-height: 1;
+  animation: reaction-float 2.8s ease-out forwards;
+  user-select: none;
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,.5));
+}
+
+/* Reaction bar — horizontal strip at bottom of editor */
+.reaction-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(15,20,32,.85);
+  backdrop-filter: blur(8px);
+  border-top: 1px solid rgba(255,255,255,.07);
+  flex-shrink: 0;
+}
+
+.reaction-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.1);
+  background: rgba(255,255,255,.05);
+  cursor: pointer;
+  transition: background .15s, transform .12s, border-color .15s;
+}
+.reaction-btn:hover:not(:disabled) {
+  background: rgba(255,255,255,.12);
+  border-color: rgba(255,255,255,.2);
+  transform: scale(1.15) translateY(-2px);
+}
+.reaction-btn:active:not(:disabled) { transform: scale(.9); }
+.reaction-btn:disabled { cursor: default; }
+
+.reaction-btn__emoji { font-size: 22px; line-height: 1; }
+
+.reaction-btn__count {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 0 2px var(--bg-base);
+  font-family: var(--font-mono);
+}
+
+.reaction-bar__label {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  user-select: none;
+}
 
 /* ── W5 Replay ─────────────────────────────────────────────── */
+
 .replay-layout {
   display: flex;
   flex-direction: column;

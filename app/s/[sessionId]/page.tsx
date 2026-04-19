@@ -6,6 +6,7 @@ import { CodeViewer } from '@/components/CodeViewer'
 import { AnnotationPanel } from '@/components/AnnotationPanel'
 import { QAPanel, type QAEntry } from '@/components/QAPanel'
 import { RunPanel } from '@/components/RunPanel'
+import { ReactionsOverlay } from '@/components/ReactionsOverlay'
 import { useSocket } from '@/hooks/useSocket'
 import { useViewerName } from '@/hooks/useViewerName'
 import type { Annotation } from '@/lib/annotate'
@@ -97,7 +98,10 @@ export default function ViewerPage() {
       )}
 
       <div className="session-body">
-        <CodeViewer code={code} language={language} isConnected={isConnected} />
+        <div style={{ position: 'relative', flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          <CodeViewer code={code} language={language} isConnected={isConnected} />
+          <ReactionsOverlay socket={socket} sessionId={sessionId} role="viewer" />
+        </div>
 
         <aside className="session-sidebar">
           {/* Session info */}

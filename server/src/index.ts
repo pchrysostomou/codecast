@@ -245,6 +245,13 @@ io.on('connection', (socket) => {
     }
   )
 
+  // ── reaction:send (viewer sends emoji → relay to all in room) ─
+  socket.on('reaction:send', ({ sessionId, emoji }: { sessionId: string; emoji: string }) => {
+    // Relay to EVERYONE in the session (including sender's other windows)
+    io.to(sessionId).emit('reaction:broadcast', { emoji, from: socket.id })
+    console.log(`[reaction] ${socket.id} → ${sessionId}: ${emoji}`)
+  })
+
   // ── code:run  (host runs code → broadcast result to viewers) ─
   socket.on('code:run', ({ sessionId, result }: {
     sessionId: string
