@@ -280,14 +280,6 @@ CI runs all checks automatically on every push via GitHub Actions.
 
 > 💡 **Free tier note**: Railway's free plan provides $5/month of compute credit (~500hrs). Once the credit is exhausted the server stops. The platform degrades gracefully — code execution (JS/TS/Python) and AI annotations continue working via Vercel even when Railway is down.
 
----
-
-## 📄 License
-
-MIT — do whatever you want with this.
-
----
-
 <p align="center">
   Built by <a href="https://github.com/pchrysostomou">@pchrysostomou</a> · 
   <a href="https://codecast-eta.vercel.app">Live Demo</a>
