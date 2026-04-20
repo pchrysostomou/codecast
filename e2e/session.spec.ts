@@ -37,7 +37,7 @@ test.describe('Host Page', () => {
     sessionId = hostUrl.split('/host/')[1]
     // Wait for the topbar to confirm the host page has fully hydrated
     // (networkidle is unreliable when Socket.io keeps reconnecting)
-    await page.waitForSelector('.session-topbar', { timeout: 130000 })
+        await page.waitForSelector('.session-topbar, .monaco-editor', { timeout: 30_000 });
   })
 
   test('shows Monaco editor', async ({ page }) => {
